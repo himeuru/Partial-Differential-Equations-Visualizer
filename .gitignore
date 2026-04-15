@@ -1,0 +1,52 @@
+# build output
+build/
+out/
+cmake-build-*/
+bin/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+_deps/
+*.cmake
+
+# Visual Studio / MSVC
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ImGui runtime state (regenerated on each launch)
+imgui.ini
+
+# Our own debug dumps
+green_debug.log
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local assistant state
+.claude/
