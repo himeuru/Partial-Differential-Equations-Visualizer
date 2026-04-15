@@ -3,26 +3,93 @@
 
 static const double PI = std::acos(-1.0);
 
+double WaveSolver::evalAlpha(double t) const {
+    if (!useNonhomogBC || !alphaExpr.ok) return 0.0;
+    parser::EvalContext ctx;
+    ctx.vars["t"] = t;
+    ctx.vars["L"] = double(L);
+    ctx.vars["a"] = double(a);
+    double v = alphaExpr.expr.eval(ctx);
+    return std::isfinite(v) ? v : 0.0;
+}
+
+double WaveSolver::evalBeta(double t) const {
+    if (!useNonhomogBC || !betaExpr.ok) return 0.0;
+    parser::EvalContext ctx;
+    ctx.vars["t"] = t;
+    ctx.vars["L"] = double(L);
+    ctx.vars["a"] = double(a);
+    double v = betaExpr.expr.eval(ctx);
+    return std::isfinite(v) ? v : 0.0;
+}
+
+double WaveSolver::evalPsi(double x) const {
+    if (!useNonzeroPsi || !psiExpr.ok) return 0.0;
+    double Ld = std::max(1e-9, double(L));
+    parser::EvalContext ctx;
+    ctx.vars["x"]  = x;
+    ctx.vars["xi"] = x / Ld;
+    ctx.vars["L"]  = double(L);
+    ctx.vars["a"]  = double(a);
+    double v = psiExpr.expr.eval(ctx);
+    return std::isfinite(v) ? v : 0.0;
+}
+
+double WaveSolver::evalForcing(double x) const {
+    if (!useForcing || !forcingExpr.ok) return 0.0;
+    double Ld = std::max(1e-9, double(L));
+    parser::EvalContext ctx;
+    ctx.vars["x"]  = x;
+    ctx.vars["xi"] = x / Ld;
+    ctx.vars["L"]  = double(L);
+    ctx.vars["a"]  = double(a);
+    double v = forcingExpr.expr.eval(ctx);
+    return std::isfinite(v) ? v : 0.0;
+}
+
+// Central-difference second derivative for α(t), β(t).
+double WaveSolver::alphaDD(double t) const {
+    const double h = 1e-4;
+    return (evalAlpha(t + h) - 2.0 * evalAlpha(t) + evalAlpha(t - h)) / (h * h);
+}
+double WaveSolver::betaDD(double t) const {
+    const double h = 1e-4;
+    return (evalBeta(t + h) - 2.0 * evalBeta(t) + evalBeta(t - h)) / (h * h);
+}
+
+// Boundary lift v(x,t) = α(t)(1 - x/L) + β(t)(x/L)
+double WaveSolver::vAt(double x, double t) const {
+    if (!useNonhomogBC) return 0.0;
+    double xi = x / std::max(1e-9, double(L));
+    return evalAlpha(t) * (1.0 - xi) + evalBeta(t) * xi;
+}
+
 void WaveSolver::init() {
     time = 0.0f;
-    fdFirstStep = true;
+    fdFirstStep      = true;
+    fourierFirstStep = true;
+
+    alphaExpr.reparse();
+    betaExpr.reparse();
+    psiExpr.reparse();
+    forcingExpr.reparse();
+
     computeFourierCoeffs();
     initFDGrid();
 }
 
-void WaveSolver::stepFD(float dt) {
-    if (dt <= 0.f) return;
+void WaveSolver::stepFD(float dtF) {
+    if (dtF <= 0.f) return;
     double dx = double(L) / double(N);
     double aa = std::max(1e-6, double(a));
 
-    // Courant 0.7 — some slack above CFL for slider jitter
+    // Courant 0.7 — slack above CFL for slider jitter
     const double rTarget = 0.7;
     double dtMaxPerStep  = rTarget * dx / aa;
 
-    // cap per-call advance so the first-frame dt spike doesn't explode nsub
-    double dtTotal = std::min(double(dt), 200.0 * dtMaxPerStep);
+    // cap per-call advance so a dt spike doesn't explode nsub
+    double dtTotal = std::min(double(dtF), 200.0 * dtMaxPerStep);
 
-    // 3-level stencil needs uniform sub-steps
     int nsub = (int)std::ceil(dtTotal / dtMaxPerStep);
     if (nsub < 1) nsub = 1;
     double dtStep = dtTotal / nsub;
@@ -35,17 +102,27 @@ void WaveSolver::stepFD(float dt) {
 
     for (int k = 0; k < nsub; ++k) {
         if (fdFirstStep) {
-            // zero initial velocity: u1 = u0 + (r^2/2) * Laplacian(u0)
-            for (int i = 1; i < n - 1; ++i)
-                u2[i] = u1[i] + 0.5 * r2 * (u1[i+1] - 2.0*u1[i] + u1[i-1]);
+            // first step with ψ and f: u¹ = u⁰ + ψ·dt + (dt²/2)[a²·Δu⁰ + f]
+            for (int i = 1; i < n - 1; ++i) {
+                double xi  = i * dx;
+                double lap = (u1[i+1] - 2.0*u1[i] + u1[i-1]);
+                u2[i] = u1[i]
+                      + evalPsi(xi) * dtStep
+                      + 0.5 * r2 * lap
+                      + 0.5 * dtStep * dtStep * evalForcing(xi);
+            }
             fdFirstStep = false;
         } else {
-            for (int i = 1; i < n - 1; ++i)
-                u2[i] = 2.0*(1.0 - r2)*u1[i] + r2*(u1[i+1] + u1[i-1]) - u0[i];
+            for (int i = 1; i < n - 1; ++i) {
+                double xi = i * dx;
+                u2[i] = 2.0*(1.0 - r2)*u1[i] + r2*(u1[i+1] + u1[i-1]) - u0[i]
+                      + dtStep * dtStep * evalForcing(xi);
+            }
         }
-        u2[0] = 0.0; u2[n-1] = 0.0;
+        double tNext = double(time) + dtStep;
+        u2[0]   = evalAlpha(tNext);
+        u2[n-1] = evalBeta (tNext);
 
-        // explicit guard — reset instead of propagating inf to the plot
         double peak = 0.0;
         for (int i = 0; i < n; ++i) {
             double v = std::fabs(u2[i]);
@@ -58,20 +135,89 @@ void WaveSolver::stepFD(float dt) {
             return;
         }
 
-        // rotate: u0 <- old u1 (prev), u1 <- just computed
         u0.swap(u1);
         u1.swap(u2);
         time += float(dtStep);
     }
 }
 
-double WaveSolver::fourierAt(double x, double t) const {
-    double sum = 0.0;
-    for (int n = 0; n < (int)A.size(); ++n) {
-        double lambda = (n + 1) * PI / L;
-        sum += A[n] * std::cos(lambda * a * t) * std::sin(lambda * x);
+void WaveSolver::stepFourier(float dtF) {
+    if (dtF <= 0.f) return;
+    if (nTerms < 1) return;
+
+    // Homogeneous case: keep closed-form path, just advance simulated time.
+    if (!useForcing && !useNonhomogBC && !useNonzeroPsi) {
+        time += dtF;
+        return;
     }
-    return sum;
+
+    if ((int)Tprev.size() != nTerms || (int)Tcur.size() != nTerms) {
+        computeFourierCoeffs();
+        fourierFirstStep = true;
+    }
+
+    double dt       = double(dtF);
+    double aa       = std::max(1e-6, double(a));
+    double omegaMax = nTerms * PI * aa / double(L);
+    double dtMax    = (omegaMax > 1e-9) ? (1.6 / omegaMax) : dt;  // Verlet: ω·dt < 2
+    int    nsub     = std::max(1, (int)std::ceil(dt / dtMax));
+    double ds       = dt / nsub;
+
+    for (int k = 0; k < nsub; ++k) {
+        double t   = double(time);
+        double aDD = useNonhomogBC ? alphaDD(t) : 0.0;
+        double bDD = useNonhomogBC ? betaDD (t) : 0.0;
+
+        for (int n = 1; n <= nTerms; ++n) {
+            double omega  = n * PI * aa / double(L);
+            double omega2 = omega * omega;
+
+            // Fₙ(t) = fₙ − α''(t)·(2/(nπ)) − β''(t)·(2/(nπ))·(−1)^(n+1)
+            double liftA = 2.0 / (double(n) * PI);
+            double sign  = (n % 2 == 0) ? -1.0 : 1.0;
+            double liftB = liftA * sign;
+            double fn    = useForcing ? fHat[n-1] : 0.0;
+            double Fn    = fn - aDD * liftA - bDD * liftB;
+
+            double next;
+            if (fourierFirstStep) {
+                double phi_n = A[n-1];
+                double psi_n = B[n-1];
+                next = phi_n + psi_n * ds
+                     + 0.5 * ds * ds * (-omega2 * phi_n + Fn);
+                Tprev[n-1] = phi_n;
+                Tcur [n-1] = next;
+            } else {
+                double Tnow = Tcur [n-1];
+                double Told = Tprev[n-1];
+                next = 2.0 * Tnow - Told + ds * ds * (-omega2 * Tnow + Fn);
+                if (!std::isfinite(next) || std::fabs(next) > 1e6) next = 0.0;
+                Tprev[n-1] = Tnow;
+                Tcur [n-1] = next;
+            }
+        }
+        fourierFirstStep = false;
+        time += float(ds);
+    }
+}
+
+double WaveSolver::fourierAt(double x, double t) const {
+    // Homogeneous: exact closed form (unchanged behavior).
+    if (!useForcing && !useNonhomogBC && !useNonzeroPsi) {
+        double sum = 0.0;
+        for (int n = 0; n < (int)A.size(); ++n) {
+            double lambda = (n + 1) * PI / L;
+            sum += A[n] * std::cos(lambda * a * t) * std::sin(lambda * x);
+        }
+        return sum;
+    }
+    // Inhomogeneous: reconstruct w(x,t) from Verlet amplitudes + boundary lift.
+    double sum = 0.0;
+    for (int n = 0; n < (int)Tcur.size(); ++n) {
+        double lambda = (n + 1) * PI / L;
+        sum += Tcur[n] * std::sin(lambda * x);
+    }
+    return sum + vAt(x, t);
 }
 
 void WaveSolver::getFourierProfile(float t, std::vector<float>& out) const {
@@ -90,20 +236,47 @@ void WaveSolver::getFDProfile(std::vector<float>& out) const {
 }
 
 void WaveSolver::computeFourierCoeffs() {
-    // A_n = (2/L) integral_0^L f(x) sin(n pi x/L) dx, trapezoid rule
-    int   M  = 2000;
-    double dx = L / M;
-    A.resize(nTerms);
+    // Project onto sin basis, 500-pt trapezoid:
+    //   φₙ = (2/L) ∫ [φ(x) - v(x,0)]   sin(nπx/L) dx
+    //   ψₙ = (2/L) ∫ [ψ(x) - v_t(x,0)] sin(nπx/L) dx
+    //   fₙ = (2/L) ∫  f(x)              sin(nπx/L) dx
+    int    M  = 500;
+    double dx = L / double(M);
+
+    A.assign(nTerms, 0.0);
+    B.assign(nTerms, 0.0);
+    fHat.assign(nTerms, 0.0);
+    Tprev.assign(nTerms, 0.0);
+    Tcur .assign(nTerms, 0.0);
+
+    // v_t(x,0) via forward difference on α/β
+    const double hT = 1e-5;
+    double alpha0 = evalAlpha(0.0), beta0 = evalBeta(0.0);
+    double alphaH = evalAlpha(hT),  betaH = evalBeta(hT);
+
     for (int n = 1; n <= nTerms; ++n) {
-        double sum = 0.0;
-        double lambda = n * PI / L;
+        double sumPhi = 0.0, sumPsi = 0.0, sumF = 0.0;
+        double lambda = n * PI / double(L);
         for (int i = 0; i <= M; ++i) {
-            double x  = i * dx;
-            double fx = evalIC(preset, float(x), L, &customIC);
-            double w  = (i == 0 || i == M) ? 0.5 : 1.0;
-            sum += w * fx * std::sin(lambda * x) * dx;
+            double x    = i * dx;
+            double xi   = x / std::max(1e-9, double(L));
+            double phiX = evalIC(preset, float(x), L, &customIC);
+            double v0   = useNonhomogBC ? (alpha0*(1.0 - xi) + beta0*xi) : 0.0;
+            double vH   = useNonhomogBC ? (alphaH*(1.0 - xi) + betaH*xi) : 0.0;
+            double vT0  = useNonhomogBC ? (vH - v0) / hT                 : 0.0;
+            double psiX = evalPsi    (x);
+            double fX   = evalForcing(x);
+            double w    = (i == 0 || i == M) ? 0.5 : 1.0;
+            double s    = std::sin(lambda * x);
+            sumPhi += w * (phiX - v0 ) * s * dx;
+            sumPsi += w * (psiX - vT0) * s * dx;
+            sumF   += w *  fX          * s * dx;
         }
-        A[n-1] = 2.0 / L * sum;
+        A   [n-1] = 2.0 / L * sumPhi;
+        B   [n-1] = 2.0 / L * sumPsi;
+        fHat[n-1] = 2.0 / L * sumF;
+        Tprev[n-1] = A[n-1];   // T(0) = φₙ
+        Tcur [n-1] = A[n-1];   // placeholder until the first Verlet step
     }
 }
 
@@ -113,13 +286,15 @@ void WaveSolver::initFDGrid() {
     u1.resize(pts);
     u2.resize(pts);
 
-    double dx = L / N;
-    // u0 = u1 = f(x); initial velocity is zero
+    double dx = L / double(N);
     for (int i = 0; i <= N; ++i) {
         double val = evalIC(preset, float(i * dx), L, &customIC);
         u0[i] = val;
         u1[i] = val;
     }
-    u0[0] = u0[N] = 0.0;
-    u1[0] = u1[N] = 0.0;
+    // Bake α(0), β(0) into the endpoints so the first FD step is consistent.
+    double a0 = evalAlpha(0.0);
+    double b0 = evalBeta (0.0);
+    u0[0] = u1[0] = a0;
+    u0[N] = u1[N] = b0;
 }

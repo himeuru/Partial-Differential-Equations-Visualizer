@@ -462,6 +462,16 @@ int main() {
     heat.customIC.reparse();
     fourier.customIC.reparse();
 
+    // Defaults for the wave BVP extensions: everything identically zero.
+    wave.alphaExpr  .source = "0";
+    wave.betaExpr   .source = "0";
+    wave.psiExpr    .source = "0";
+    wave.forcingExpr.source = "0";
+    wave.alphaExpr  .reparse();
+    wave.betaExpr   .reparse();
+    wave.psiExpr    .reparse();
+    wave.forcingExpr.reparse();
+
     // default piecewise Green: one piece [0, L] = heat kernel
     {
         GreenSolver::Piece p;
@@ -682,8 +692,8 @@ int main() {
         // Advance simulations only while their tab is visible
         if (wPlay && gTab == TAB_WAVE) {
             float wDt = dt * wSpeed;
-            if (wMode == 1) wave.stepFD(wDt);
-            else            wave.time += wDt;
+            if (wMode == 1) wave.stepFD    (wDt);
+            else            wave.stepFourier(wDt);
         }
         if (hPlay && gTab == TAB_HEAT) {
             float hDt = dt * hSpeed;
@@ -744,6 +754,47 @@ int main() {
                 if (wave.preset == ICPreset::Custom) {
                     if (customExprInput(u8"Ваше f(x):", wave.customIC))
                         wave.init();
+                }
+                ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+
+                ImGui::TextColored({1.f,0.85f,0.6f,1.f}, u8"Неоднородные условия:");
+                {
+                    bool bvpChanged = false;
+                    if (ImGui::Checkbox(u8"α(t), β(t) — ненулевые концы",
+                                        &wave.useNonhomogBC))
+                        bvpChanged = true;
+                    if (wave.useNonhomogBC) {
+                        if (customExprInput(u8"α(t) = u(0, t):",
+                                            wave.alphaExpr,
+                                            u8"переменная: t (доступны L, a, pi, e)"))
+                            bvpChanged = true;
+                        if (customExprInput(u8"β(t) = u(L, t):",
+                                            wave.betaExpr,
+                                            u8"переменная: t (доступны L, a, pi, e)"))
+                            bvpChanged = true;
+                    }
+
+                    if (ImGui::Checkbox(u8"ψ(x) — ненулевая начальная скорость",
+                                        &wave.useNonzeroPsi))
+                        bvpChanged = true;
+                    if (wave.useNonzeroPsi) {
+                        if (customExprInput(u8"ψ(x) = u_t(x, 0):",
+                                            wave.psiExpr,
+                                            u8"переменная: x (доступны xi, L, a, pi, e)"))
+                            bvpChanged = true;
+                    }
+
+                    if (ImGui::Checkbox(u8"f(x) — правая часть",
+                                        &wave.useForcing))
+                        bvpChanged = true;
+                    if (wave.useForcing) {
+                        if (customExprInput(u8"f(x):",
+                                            wave.forcingExpr,
+                                            u8"переменная: x (доступны xi, L, a, pi, e)"))
+                            bvpChanged = true;
+                    }
+
+                    if (bvpChanged) wave.init();
                 }
                 ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
