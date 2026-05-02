@@ -1,5 +1,6 @@
 #include "Renderer.h"
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <algorithm>
 #include <cstdio>

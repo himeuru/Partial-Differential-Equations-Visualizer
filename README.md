@@ -38,25 +38,27 @@
 
 ### Сборка
 
-Нужен CMake ≥ 3.16, компилятор C++17, установленная SFML 2.5.x и git (для FetchContent — ImGui и ImGui-SFML подтягиваются сами).
+Нужен CMake ≥ 3.16, компилятор C++17 и git. Все зависимости (SFML, ImGui, ImGui-SFML) подтягиваются через FetchContent — если SFML уже установлена в системе, используется она, иначе CMake скачает и соберёт её сам.
 
 Под Windows с Visual Studio:
 
 ```
-git clone <url>
-cd pde-visualizer
-cmake -B build -G "Visual Studio 17 2022" -A x64 -DSFML_DIR="C:/libs/SFML-2.5.1/lib/cmake/SFML"
+git clone https://github.com/himeuru/Partial-Differential-Equations-Visualizer.git
+cd Partial-Differential-Equations-Visualizer
+cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-Под MinGW аналогично, только `-G "MinGW Makefiles"`. После сборки `.exe` лежит в `build/Release/` — нужные SFML DLL туда скопируются автоматически post-build шагом (если в системе есть `pwsh.exe`; если нет — скопируй руками `sfml-graphics-2.dll`, `sfml-window-2.dll`, `sfml-system-2.dll` из `bin` установки SFML).
+Под MinGW аналогично, только `-G "MinGW Makefiles"`. После сборки `.exe` лежит в `build/Release/` (или `build/` для MinGW) — нужные SFML DLL туда копируются автоматически post-build шагом.
 
-Под Linux (Ubuntu/Debian):
+Если хочется использовать заранее установленную SFML 2.5.1 вместо автоскачивания — добавь `-DSFML_DIR="C:/path/to/SFML-2.5.1/lib/cmake/SFML"`.
+
+Под Linux (Ubuntu/Debian) — с системной SFML быстрее:
 
 ```
 sudo apt install libsfml-dev cmake build-essential git
-git clone <url>
-cd pde-visualizer
+git clone https://github.com/himeuru/Partial-Differential-Equations-Visualizer.git
+cd Partial-Differential-Equations-Visualizer
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/pde_visualizer
