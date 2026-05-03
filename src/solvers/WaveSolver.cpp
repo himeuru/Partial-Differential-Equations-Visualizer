@@ -1,8 +1,6 @@
 #include "WaveSolver.h"
 #include <cmath>
 
-static const double PI = std::acos(-1.0);
-
 double WaveSolver::evalAlpha(double t) const {
     if (!useNonhomogBC || !alphaExpr.ok) return 0.0;
     parser::EvalContext ctx;
@@ -68,6 +66,8 @@ void WaveSolver::init() {
     time = 0.0f;
     fdFirstStep      = true;
     fourierFirstStep = true;
+    fdAccum          = 0.0;
+    fourierAccum     = 0.0;
 
     alphaExpr.reparse();
     betaExpr.reparse();
@@ -83,18 +83,23 @@ void WaveSolver::stepFD(float dtF) {
     double dx = double(L) / double(N);
     double aa = std::max(1e-6, double(a));
 
-    // Courant 0.7 — slack above CFL for slider jitter
+    // Fixed sub-step at Courant 0.7. Leapfrog references u[n-1] from the
+    // previous call, so dtStep MUST be constant across calls — varying it
+    // breaks the stencil and grids visibly explode when the speed slider
+    // is dragged. Real-time fluctuations are absorbed by the accumulator.
     const double rTarget = 0.7;
-    double dtMaxPerStep  = rTarget * dx / aa;
+    const double dtStep  = rTarget * dx / aa;
+    const double r       = rTarget;
+    const double r2      = r * r;
 
-    // cap per-call advance so a dt spike doesn't explode nsub
-    double dtTotal = std::min(double(dtF), 200.0 * dtMaxPerStep);
-
-    int nsub = (int)std::ceil(dtTotal / dtMaxPerStep);
-    if (nsub < 1) nsub = 1;
-    double dtStep = dtTotal / nsub;
-    double r      = aa * dtStep / dx;
-    double r2     = r * r;
+    fdAccum += double(dtF);
+    int nsub = (int)std::floor(fdAccum / dtStep);
+    fdAccum -= nsub * dtStep;
+    if (nsub > 200) {                  // dt spike: drop the backlog rather than catch up
+        nsub = 200;
+        fdAccum = 0.0;
+    }
+    if (nsub < 1) return;
 
     int n = (int)u1.size();
     if (n < 3) return;
@@ -154,14 +159,26 @@ void WaveSolver::stepFourier(float dtF) {
     if ((int)Tprev.size() != nTerms || (int)Tcur.size() != nTerms) {
         computeFourierCoeffs();
         fourierFirstStep = true;
+        fourierAccum     = 0.0;
     }
 
-    double dt       = double(dtF);
+    // Fixed Verlet sub-step. Same reason as stepFD: variable ds across
+    // calls invalidates the previous-step amplitude T[n-1]. The 5 ms cap
+    // keeps enough sub-steps per 16 ms frame that animation looks smooth
+    // at speed=1 even when the stability bound itself would be large.
     double aa       = std::max(1e-6, double(a));
-    double omegaMax = nTerms * PI * aa / double(L);
-    double dtMax    = (omegaMax > 1e-9) ? (1.6 / omegaMax) : dt;  // Verlet: ω·dt < 2
-    int    nsub     = std::max(1, (int)std::ceil(dt / dtMax));
-    double ds       = dt / nsub;
+    double omegaMax = nTerms * kPi * aa / double(L);
+    double dtStable = (omegaMax > 1e-9) ? (1.6 / omegaMax) : 5e-3;
+    const double ds = std::min(dtStable, 5e-3);
+
+    fourierAccum += double(dtF);
+    int nsub = (int)std::floor(fourierAccum / ds);
+    fourierAccum -= nsub * ds;
+    if (nsub > 200) {
+        nsub = 200;
+        fourierAccum = 0.0;
+    }
+    if (nsub < 1) return;
 
     for (int k = 0; k < nsub; ++k) {
         double t   = double(time);
@@ -169,11 +186,11 @@ void WaveSolver::stepFourier(float dtF) {
         double bDD = useNonhomogBC ? betaDD (t) : 0.0;
 
         for (int n = 1; n <= nTerms; ++n) {
-            double omega  = n * PI * aa / double(L);
+            double omega  = n * kPi * aa / double(L);
             double omega2 = omega * omega;
 
             // Fₙ(t) = fₙ − α''(t)·(2/(nπ)) − β''(t)·(2/(nπ))·(−1)^(n+1)
-            double liftA = 2.0 / (double(n) * PI);
+            double liftA = 2.0 / (double(n) * kPi);
             double sign  = (n % 2 == 0) ? -1.0 : 1.0;
             double liftB = liftA * sign;
             double fn    = useForcing ? fHat[n-1] : 0.0;
@@ -206,7 +223,7 @@ double WaveSolver::fourierAt(double x, double t) const {
     if (!useForcing && !useNonhomogBC && !useNonzeroPsi) {
         double sum = 0.0;
         for (int n = 0; n < (int)A.size(); ++n) {
-            double lambda = (n + 1) * PI / L;
+            double lambda = (n + 1) * kPi / L;
             sum += A[n] * std::cos(lambda * a * t) * std::sin(lambda * x);
         }
         return sum;
@@ -214,7 +231,7 @@ double WaveSolver::fourierAt(double x, double t) const {
     // Inhomogeneous: reconstruct w(x,t) from Verlet amplitudes + boundary lift.
     double sum = 0.0;
     for (int n = 0; n < (int)Tcur.size(); ++n) {
-        double lambda = (n + 1) * PI / L;
+        double lambda = (n + 1) * kPi / L;
         sum += Tcur[n] * std::sin(lambda * x);
     }
     return sum + vAt(x, t);
@@ -256,7 +273,7 @@ void WaveSolver::computeFourierCoeffs() {
 
     for (int n = 1; n <= nTerms; ++n) {
         double sumPhi = 0.0, sumPsi = 0.0, sumF = 0.0;
-        double lambda = n * PI / double(L);
+        double lambda = n * kPi / double(L);
         for (int i = 0; i <= M; ++i) {
             double x    = i * dx;
             double xi   = x / std::max(1e-9, double(L));

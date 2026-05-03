@@ -1,5 +1,5 @@
 #pragma once
-#include "Common.h"
+#include "IC.h"
 
 // u_tt = a^2 u_xx + f(x) on [0, L] with Dirichlet BCs u(0,t)=α(t), u(L,t)=β(t)
 // and initial conditions u(x,0)=φ(x), u_t(x,0)=ψ(x).
@@ -38,6 +38,12 @@ public:
     // FD state — three time layers for the stencil
     std::vector<double> u0, u1, u2;
     bool fdFirstStep = true;
+
+    // Real-time accumulators. Both stepFD and stepFourier (inhomogeneous
+    // branch) integrate with a fixed internal sub-step so leapfrog/Verlet
+    // stay self-consistent when the input dt jitters between frames.
+    double fdAccum      = 0.0;
+    double fourierAccum = 0.0;
 
     void init();
     void stepFD(float dt);

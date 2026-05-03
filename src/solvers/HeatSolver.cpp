@@ -2,8 +2,6 @@
 #include <cmath>
 #include <algorithm>
 
-static const double PI_H = std::acos(-1.0);
-
 void HeatSolver::init() {
     time = 0.0f;
     computeCoeffs();
@@ -57,7 +55,7 @@ void HeatSolver::getFourierProfile(float t, std::vector<float>& out) const {
         double phi = bL + (bR - bL) * (x / L);
         double val = phi;
         for (int n = 1; n <= (int)B.size(); ++n) {
-            double lambda = n * PI_H / L;
+            double lambda = n * kPi / L;
             val += B[n-1]
                    * std::exp(-(double)a*a * lambda*lambda * t)
                    * std::sin(lambda * x);
@@ -81,7 +79,7 @@ void HeatSolver::computeCoeffs() {
     B.resize(nTerms);
     for (int n = 1; n <= nTerms; ++n) {
         double sum    = 0.0;
-        double lambda = n * PI_H / L;
+        double lambda = n * kPi / L;
         for (int i = 0; i <= M; ++i) {
             double x   = i * dx;
             double phi = bL + (bR - bL) * (x / L);

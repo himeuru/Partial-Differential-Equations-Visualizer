@@ -39,8 +39,7 @@ _deps/
 # ImGui runtime state (regenerated on each launch)
 imgui.ini
 
-# Our own debug dumps
-green_debug.log
+# Logs
 *.log
 
 # OS junk

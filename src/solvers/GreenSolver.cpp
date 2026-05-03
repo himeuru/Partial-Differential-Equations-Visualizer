@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <limits>
 
-static const double PI_G = std::acos(-1.0);
-
 void GreenSolver::compute() {
     switch (mode) {
         case GreenMode::Heat1D:         computeHeat1D();         break;
@@ -34,7 +32,7 @@ void GreenSolver::computeHeat1D() {
     g1d.resize(N + 1);
     float tSafe = std::max(t, 1e-4f);
     float sigma = std::sqrt(2.f * a * a * tSafe);
-    float coeff = 1.f / (sigma * float(std::sqrt(2.0 * PI_G)));
+    float coeff = 1.f / (sigma * float(std::sqrt(2.0 * kPi)));
 
     float dx = (xMax - xMin) / N;
     for (int i = 0; i <= N; ++i) {
@@ -74,7 +72,7 @@ void GreenSolver::computeSturmLiouville() {
         double x   = i * dx;
         double sum = 0.0;
         for (int n = 1; n <= nTerms; ++n) {
-            double lambda = n * PI_G / L;
+            double lambda = n * kPi / L;
             sum += (2.0 / L)
                    * std::sin(lambda * x)
                    * std::sin(lambda * xi_)
@@ -153,7 +151,7 @@ void GreenSolver::computeLaplace2D() {
             float x = i * dx;
             float r = std::sqrt((x - xi)*(x - xi) + (y - eta)*(y - eta));
             r = std::max(r, eps);
-            g2d[j * W + i] = float(1.0 / (2.0 * PI_G) * std::log(1.0 / r));
+            g2d[j * W + i] = float(1.0 / (2.0 * kPi) * std::log(1.0 / r));
         }
     }
 }

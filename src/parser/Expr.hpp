@@ -67,6 +67,13 @@ public:
     const std::string& error() const { return err_; }
     const std::string& source() const { return src_; }
 
+    // f(x), g(x), h(x), u(x,t), G(x,xi,t) parse as calls so they typeset
+    // nicely, but the evaluator has no body for them. Returns true if any
+    // such call appears in the tree; first match's name in `name`.
+    bool hasDisplayOnlyCalls(std::string& name) const {
+        return root_ ? findDisplayOnly(root_.get(), name) : false;
+    }
+
     struct Node {
         enum Kind { NUM, VAR, NEG, BIN, CALL };
         Kind        kind = NUM;
@@ -81,6 +88,22 @@ private:
     std::unique_ptr<Node> root_;
     std::string           err_;
     std::string           src_;
+
+    static bool findDisplayOnly(const Node* n, std::string& outName) {
+        if (!n) return false;
+        if (n->kind == Node::CALL) {
+            static const std::unordered_set<std::string> displayOnly = {
+                "f","g","h","u","G"
+            };
+            if (displayOnly.count(n->name)) {
+                outName = n->name;
+                return true;
+            }
+        }
+        for (auto& k : n->kids)
+            if (findDisplayOnly(k.get(), outName)) return true;
+        return false;
+    }
 
     struct Parser {
         const std::string& src;

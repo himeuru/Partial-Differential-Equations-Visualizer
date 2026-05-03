@@ -1,5 +1,5 @@
 #pragma once
-#include "Common.h"
+#include "IC.h"
 
 // u_t = a^2 u_xx on [0, L].
 // Analytic Fourier series with boundary lift, plus Crank-Nicolson FD.

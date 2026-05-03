@@ -1,5 +1,5 @@
 #pragma once
-#include "Common.h"
+#include "IC.h"
 
 // Fourier sine-series decomposition and partial-sum convergence visualizer.
 

@@ -1,20 +1,17 @@
 #pragma once
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 #include <vector>
 #include <string>
 #include <cmath>
 #include <algorithm>
 #include "parser/Expr.hpp"
 
-enum class BCType { Dirichlet, Neumann };
+inline constexpr double kPi = 3.14159265358979323846;
 
+// All boundaries currently are Dirichlet — the struct exists so the
+// call site reads as `bcLeft.value` rather than a bare float.
 struct BoundaryCondition {
-    BCType type  = BCType::Dirichlet;
-    float  value = 0.0f;
+    float value = 0.0f;
 };
 
 enum class ICPreset {
@@ -49,9 +46,19 @@ struct ICCustomExpr {
     int          pendingCursorOffset = -1;
 
     bool reparse() {
-        ok  = expr.parse(source);
-        err = ok ? std::string{} : expr.error();
-        return ok;
+        ok = expr.parse(source);
+        if (!ok) { err = expr.error(); return false; }
+        // f(x), g(x), u(x,t), G(x,xi,t) parse as calls so MathRender can
+        // typeset them, but the evaluator has no body — reject here so the
+        // user gets an error instead of a silent zero.
+        std::string displayOnly;
+        if (expr.hasDisplayOnlyCalls(displayOnly)) {
+            ok  = false;
+            err = "функция " + displayOnly + "(...) только для отображения — задайте её явно";
+            return false;
+        }
+        err.clear();
+        return true;
     }
 };
 
@@ -61,7 +68,7 @@ inline float evalIC(ICPreset p, float x, float L,
     float xi = x / L;
     switch (p) {
         case ICPreset::SinePulse:
-            return std::sin(float(M_PI) * xi);
+            return std::sin(float(kPi) * xi);
         case ICPreset::TrianglePulse:
             return (xi < 0.5f) ? 2.0f * xi : 2.0f * (1.0f - xi);
         case ICPreset::GaussianPulse: {
@@ -71,7 +78,7 @@ inline float evalIC(ICPreset p, float x, float L,
         case ICPreset::StepFunction:
             return (xi < 0.5f) ? 1.0f : 0.0f;
         case ICPreset::TwoModes:
-            return std::sin(float(M_PI)*xi) + 0.5f*std::sin(2.f*float(M_PI)*xi);
+            return std::sin(float(kPi)*xi) + 0.5f*std::sin(2.f*float(kPi)*xi);
         case ICPreset::Custom: {
             if (!custom || !custom->ok) return 0.0f;
             parser::EvalContext ctx;

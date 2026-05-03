@@ -140,18 +140,19 @@ void PlotArea::drawAxes() {
     const unsigned  tickSz = 9u;
 
     char buf[32];
+    auto formatTick = [&](float v) {
+        float absv = std::fabs(v);
+        if      (absv < 1e-9f)                   std::snprintf(buf, sizeof(buf), "0");
+        else if (absv >= 100.f || absv < 0.001f) std::snprintf(buf, sizeof(buf), "%.1e", v);
+        else if (absv >= 10.f)                   std::snprintf(buf, sizeof(buf), "%.1f", v);
+        else if (absv >= 1.f)                    std::snprintf(buf, sizeof(buf), "%.2f", v);
+        else                                     std::snprintf(buf, sizeof(buf), "%.3f", v);
+    };
 
     // Y-axis: 5 labels on the left
     for (int i = 0; i <= ny; ++i) {
         float v = yMin_ + (yMax_ - yMin_) * i / float(ny);
-        // Use compact format: avoid too many decimals
-        float absv = std::fabs(v);
-        if      (absv < 1e-9f)                  std::snprintf(buf, sizeof(buf), "0");
-        else if (absv >= 100.f || absv < 0.001f) std::snprintf(buf, sizeof(buf), "%.1e", v);
-        else if (absv >= 10.f)                  std::snprintf(buf, sizeof(buf), "%.1f", v);
-        else if (absv >= 1.f)                   std::snprintf(buf, sizeof(buf), "%.2f", v);
-        else                                     std::snprintf(buf, sizeof(buf), "%.3f", v);
-
+        formatTick(v);
         sf::Text txt(buf, s_tickFont, tickSz);
         txt.setFillColor(tickCol);
         sf::FloatRect bounds = txt.getLocalBounds();
@@ -165,13 +166,7 @@ void PlotArea::drawAxes() {
     // X-axis: nx+1 labels on the bottom
     for (int i = 0; i <= nx; ++i) {
         float v = xMin_ + (xMax_ - xMin_) * i / float(nx);
-        float absv = std::fabs(v);
-        if      (absv < 1e-9f)                  std::snprintf(buf, sizeof(buf), "0");
-        else if (absv >= 100.f || absv < 0.001f) std::snprintf(buf, sizeof(buf), "%.1e", v);
-        else if (absv >= 10.f)                  std::snprintf(buf, sizeof(buf), "%.1f", v);
-        else if (absv >= 1.f)                   std::snprintf(buf, sizeof(buf), "%.2f", v);
-        else                                     std::snprintf(buf, sizeof(buf), "%.3f", v);
-
+        formatTick(v);
         sf::Text txt(buf, s_tickFont, tickSz);
         txt.setFillColor(tickCol);
         sf::FloatRect bounds = txt.getLocalBounds();

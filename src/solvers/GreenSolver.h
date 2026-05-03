@@ -1,5 +1,5 @@
 #pragma once
-#include "Common.h"
+#include "IC.h"
 
 // Green's functions visualizer: heat, wave, Sturm-Liouville, Laplace 2D,
 // and user-defined piecewise.
