@@ -36,6 +36,10 @@ _deps/
 *.swo
 *~
 
+# clangd / LSP
+.cache/
+compile_commands.json
+
 # ImGui runtime state (regenerated on each launch)
 imgui.ini
 
