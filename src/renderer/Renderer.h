@@ -26,7 +26,7 @@ public:
 
     void setRange(float xMin, float xMax, float yMin, float yMax);
 
-    void beginFrame(sf::Color bg = sf::Color(12, 14, 24));
+    void beginFrame(sf::Color bg = sf::Color(10, 16, 20));
     void drawAxes();
     void drawCurve(const std::vector<float>& y,
                    float xMin, float xMax,

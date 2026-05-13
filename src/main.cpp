@@ -97,32 +97,51 @@ static void tickSolvers(AppState& s, float dt) {
 }
 
 static void seedDefaults(AppState& s) {
-    s.wave.customIC.source    = "exp(-40*(x/L - 0.5)^2)";
+    // Wave: variant 3 setup (see var3.md)
+    s.wave.L          = 3.0f;
+    s.wave.a          = 1.0f;
+    s.wave.nTerms     = 20;
+    s.wave.preset     = ICPreset::Custom;
+    s.wave.customIC.source    = "1 - x/L + sin(pi*x/L)";
+    s.wave.useNonhomogBC      = true;
+    s.wave.alphaExpr.source   = "1";
+    s.wave.betaExpr .source   = "(t/10)^2 - t/10";
+    s.wave.useNonzeroPsi      = false;
+    s.wave.psiExpr  .source   = "0";
+    s.wave.useForcing         = true;
+    s.wave.forcingExpr.source = "x - 2";
+
     s.heat.customIC.source    = "exp(-40*(x/L - 0.5)^2)";
     s.fourier.customIC.source = "sin(pi*x/L) + 0.3*sin(3*pi*x/L)";
     s.wave.customIC.reparse();
     s.heat.customIC.reparse();
     s.fourier.customIC.reparse();
-
-    // Wave BVP extensions: everything identically zero
-    s.wave.alphaExpr  .source = "0";
-    s.wave.betaExpr   .source = "0";
-    s.wave.psiExpr    .source = "0";
-    s.wave.forcingExpr.source = "0";
     s.wave.alphaExpr  .reparse();
     s.wave.betaExpr   .reparse();
     s.wave.psiExpr    .reparse();
     s.wave.forcingExpr.reparse();
 
-    // Default piecewise Green: one piece [0, L] = heat kernel
-    GreenSolver::Piece p;
-    p.xLoExpr.source = "0";
-    p.xHiExpr.source = "L";
-    p.expr.source    = "exp(-(x - xi)^2 / (4*a*a*t)) / sqrt(4*pi*a*a*t)";
-    p.xLoExpr.reparse();
-    p.xHiExpr.reparse();
-    p.expr.reparse();
-    s.green.customPieces.push_back(std::move(p));
+    // Green's default: piecewise Green for -u'' - a^2 u = f, u(0)=u(pi)=0.
+    // Two pieces split at x = xi (see README example).
+    s.green.mode = GreenMode::Custom1D;
+    s.green.L    = float(kPi);
+    s.green.xi   = float(kPi) * 0.5f;
+    s.green.a    = 0.7f;            // away from integers; sin(a*pi) != 0
+    s.green.t    = 0.05f;
+    {
+        GreenSolver::Piece lo, hi;
+        lo.xLoExpr.source = "0";
+        lo.xHiExpr.source = "xi";
+        lo.expr.source    = "sin(a*x)*sin(a*(pi - xi)) / (a*sin(a*pi))";
+        hi.xLoExpr.source = "xi";
+        hi.xHiExpr.source = "L";
+        hi.expr.source    = "sin(a*xi)*sin(a*(pi - x)) / (a*sin(a*pi))";
+        for (auto* p : {&lo, &hi}) {
+            p->xLoExpr.reparse(); p->xHiExpr.reparse(); p->expr.reparse();
+        }
+        s.green.customPieces.push_back(std::move(lo));
+        s.green.customPieces.push_back(std::move(hi));
+    }
 
     s.wave.init();
     s.heat.init();
@@ -217,12 +236,13 @@ int main() {
 
         ui::buildPanel(s);
 
-        window.clear(sf::Color(24, 26, 31));
+        window.clear(sf::Color(18, 22, 26));
         drawSplitter(window, s);
 
         float px0 = float(s.panelW) + 8.f;
         float py0 = 8.f;
         ui::renderActiveTab(window, s, px0, py0);
+        ui::drawHoverReadout(s);
 
         ImGui::SFML::Render(window);
         window.display();

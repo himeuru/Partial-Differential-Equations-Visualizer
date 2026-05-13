@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <vector>
+#include <string>
 #include <algorithm>
 #include <cmath>
 
@@ -37,12 +38,45 @@ struct AxisLock {
     }
 };
 
+// One sampled curve attached to a plot for hover readout. Owns its samples
+// because the source vector is a local in the per-tab render function and
+// goes out of scope before the hover pass runs.
+struct PlotCurve {
+    std::vector<float> y;
+    float       x0, x1;
+    sf::Color   color;
+    std::string label;
+};
+
 // Hit-test record for mouse dispatch over an active plot rect
 struct PlotHit {
     sf::FloatRect rect;
     View*         view;
     float         xBase0, xBase1, yBase0, yBase1;
+    std::vector<PlotCurve> curves;
 };
+
+// Append a curve to the last-registered plot (no-op if none).
+inline void registerCurve(std::vector<PlotHit>& plots,
+                          const std::vector<float>& y, float x0, float x1,
+                          sf::Color color, const char* label)
+{
+    if (plots.empty()) return;
+    plots.back().curves.push_back({y, x0, x1, color, label});
+}
+
+// Linear interpolation of a sampled curve at data-x.
+inline bool sampleCurveAt(const PlotCurve& c, float dataX, float& out) {
+    if (c.y.size() < 2)               return false;
+    if (dataX < c.x0 || dataX > c.x1) return false;
+    int   n   = int(c.y.size());
+    float fx  = (dataX - c.x0) / (c.x1 - c.x0);
+    float idx = fx * float(n - 1);
+    int   i0  = std::clamp(int(idx), 0, n - 2);
+    float t   = idx - float(i0);
+    out = (1.f - t) * c.y[i0] + t * c.y[i0 + 1];
+    return std::isfinite(out);
+}
 
 struct Stats { float mn, mx, mean, rms, l1, l2; };
 

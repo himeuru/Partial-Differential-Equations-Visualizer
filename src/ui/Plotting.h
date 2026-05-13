@@ -13,4 +13,8 @@ void renderActiveTab(sf::RenderWindow& win, AppState& s, float px, float py);
 // event should not be considered "consumed" (so the caller can keep going).
 void handlePlotMouseEvent(const sf::Event& ev, AppState& s);
 
+// Crosshair + per-curve value tooltip at the cursor. Must run between
+// ImGui::NewFrame (i.e. ImGui::SFML::Update) and ImGui::SFML::Render.
+void drawHoverReadout(AppState& s);
+
 } // namespace ui

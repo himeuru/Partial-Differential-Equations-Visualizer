@@ -100,6 +100,8 @@ static void renderWaveTab(sf::RenderWindow& win, AppState& s, float px, float py
     s.pWave.endFrame();
     drawTex(win, s.pWave.texture(), px, py);
     registerPlot(s.plots, px, py, s.pWave, &s.vWave, xBase0, xBase1, yBase0, yBase1);
+    registerCurve(s.plots, y, 0.f, w.L, st.lineColor,
+                  s.wMode == 1 ? "u (МКР)" : "u (Фурье)");
 
     float dx = w.L / std::max(1, (int)y.size() - 1);
     Stats stats = calcStats(y, dx);
@@ -131,6 +133,8 @@ static void renderHeatTab(sf::RenderWindow& win, AppState& s, float px, float py
     s.pHeat.endFrame();
     drawTex(win, s.pHeat.texture(), px, py);
     registerPlot(s.plots, px, py, s.pHeat, &s.vHeat, xBase0, xBase1, yBase0, yBase1);
+    registerCurve(s.plots, y, 0.f, h.L, st.lineColor,
+                  s.hMode == 1 ? "u (КН)" : "u (Фурье)");
 
     float dx = h.L / std::max(1, (int)y.size() - 1);
     Stats stats = calcStats(y, dx);
@@ -171,6 +175,7 @@ static void renderGreenTab(sf::RenderWindow& win, AppState& s, float px, float p
     s.pGreen.endFrame();
     drawTex(win, s.pGreen.texture(), px, py);
     registerPlot(s.plots, px, py, s.pGreen, &s.vGreen, xBase0, xBase1, yBase0, yBase1);
+    registerCurve(s.plots, g.g1d, xMin, xMax, st.lineColor, "G");
 
     float dx = (xMax - xMin) / std::max(1, (int)g.g1d.size() - 1);
     Stats stats = calcStats(g.g1d, dx);
@@ -208,6 +213,8 @@ static void renderFourierTab(sf::RenderWindow& win, AppState& s, float px, float
         s.pFTop.endFrame();
         drawTex(win, s.pFTop.texture(), px, py);
         registerPlot(s.plots, px, py, s.pFTop, &s.vFTop, fxB0, fxB1, fyB0, fyB1);
+        registerCurve(s.plots, f.exact,   0.f, f.L, {255, 220,  55, 220}, "f");
+        registerCurve(s.plots, f.partial, 0.f, f.L, { 80, 200, 255, 220}, "S_N");
     }
     // Bottom: pointwise error
     if (f.showError) {
@@ -226,6 +233,7 @@ static void renderFourierTab(sf::RenderWindow& win, AppState& s, float px, float
         drawTex(win, s.pFBot.texture(), px, py + float(HH) + 8.f);
         registerPlot(s.plots, px, py + float(HH) + 8.f, s.pFBot, &s.vFBot,
                      bxB0, bxB1, byB0, byB1);
+        registerCurve(s.plots, f.error, 0.f, f.L, {255, 80, 80, 220}, "|f - S_N|");
     }
     float dx = f.L / std::max(1, (int)f.partial.size() - 1);
     Stats stats = calcStats(f.partial, dx);
@@ -238,6 +246,52 @@ void renderActiveTab(sf::RenderWindow& win, AppState& s, float px, float py) {
         case TAB_HEAT:    renderHeatTab   (win, s, px, py); break;
         case TAB_GREEN:   renderGreenTab  (win, s, px, py); break;
         case TAB_FOURIER: renderFourierTab(win, s, px, py); break;
+    }
+}
+
+void drawHoverReadout(AppState& s) {
+    if (ImGui::GetIO().WantCaptureMouse) return;
+    ImVec2 mp = ImGui::GetMousePos();
+    for (auto& h : s.plots) {
+        if (!h.rect.contains({mp.x, mp.y})) continue;
+
+        float xlo = h.xBase0, xhi = h.xBase1, ylo = h.yBase0, yhi = h.yBase1;
+        h.view->apply(xlo, xhi, ylo, yhi);
+        float fx    = (mp.x - h.rect.left) / h.rect.width;
+        float dataX = xlo + fx * (xhi - xlo);
+
+        ImDrawList* fg = ImGui::GetForegroundDrawList();
+        fg->AddLine({mp.x, h.rect.top},
+                    {mp.x, h.rect.top + h.rect.height},
+                    IM_COL32(255, 255, 255, 80), 1.f);
+
+        // Dot on each curve at the hovered x
+        for (auto& c : h.curves) {
+            float yVal;
+            if (!sampleCurveAt(c, dataX, yVal)) continue;
+            float py = h.rect.top + (1.f - (yVal - ylo) / (yhi - ylo)) * h.rect.height;
+            if (py < h.rect.top || py > h.rect.top + h.rect.height) continue;
+            ImU32 col = IM_COL32(c.color.r, c.color.g, c.color.b, 255);
+            fg->AddCircleFilled({mp.x, py}, 4.f, col);
+            fg->AddCircle      ({mp.x, py}, 4.f, IM_COL32(20, 24, 28, 220), 0, 1.2f);
+        }
+
+        ImGui::SetNextWindowPos({mp.x + 16.f, mp.y + 16.f}, ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.88f);
+        ImGui::Begin("##hover", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+            ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+        ImGui::Text("x = %+.4f", dataX);
+        for (auto& c : h.curves) {
+            float yVal;
+            if (!sampleCurveAt(c, dataX, yVal)) continue;
+            ImVec4 col{c.color.r / 255.f, c.color.g / 255.f, c.color.b / 255.f, 1.f};
+            ImGui::TextColored(col, "%s = %+.4f", c.label.c_str(), yVal);
+        }
+        ImGui::End();
+        break;
     }
 }
 
