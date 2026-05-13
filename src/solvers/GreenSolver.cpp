@@ -118,8 +118,12 @@ void GreenSolver::computeCustom1D() {
             if (!b.usable)          continue;
             if (x < b.lo || x > b.hi) continue;
             double r = customPieces[pi].expr.expr.eval(ctx);
-            // reject near-resonance overflow (e.g. sin(a*pi) ~ 1e-16 at integer a)
-            if (std::isfinite(r) && std::fabs(r) < 1.0e10) {
+            // Reject near-resonance overflow. For the default Helmholtz Green
+            // on [0, pi], sin(a*pi) hits zero at integer a; just slightly off
+            // gives values O(1e6) that visually swamp the real shape. 1e3 is
+            // above any physically reasonable Green amplitude on the domains
+            // we care about.
+            if (std::isfinite(r) && std::fabs(r) < 1.0e3) {
                 v = float(r);
             } else {
                 v = 0.f;

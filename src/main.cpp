@@ -60,10 +60,31 @@ static void tickSolvers(AppState& s, float dt) {
     }
     wModePrev = s.wMode; hModePrev = s.hMode;
 
-    // Pause auto-playback on tab switch — otherwise t drifts in the background
+    // Tab switch = clean entry: pause, reset view, re-arm Y-lock for the
+    // tab we're entering. Source tab's state is left alone in case the user
+    // hops back.
     static int prevTab = -1;
     if (s.tab != prevTab) {
         s.wPlay = s.hPlay = s.gPlay = false;
+        switch (s.tab) {
+            case TAB_WAVE:
+                s.vWave.reset();
+                s.lWave.yLocked = true; s.lWave.needCapture = true;
+                break;
+            case TAB_HEAT:
+                s.vHeat.reset();
+                s.lHeat.yLocked = true; s.lHeat.needCapture = true;
+                break;
+            case TAB_GREEN:
+                s.vGreen.reset();
+                s.lGreen.yLocked = true; s.lGreen.needCapture = true;
+                break;
+            case TAB_FOURIER:
+                s.vFTop.reset(); s.vFBot.reset();
+                s.lFTop.yLocked = true; s.lFTop.needCapture = true;
+                s.lFBot.yLocked = true; s.lFBot.needCapture = true;
+                break;
+        }
         prevTab = s.tab;
     }
 
@@ -86,6 +107,14 @@ static void tickSolvers(AppState& s, float dt) {
         s.vGreen.reset();
         s.lGreen.yLocked = true; s.lGreen.needCapture = true;
         gModePrev = g.mode;
+    }
+    // Re-capture Y range when params that change the function's magnitude
+    // move. Without this, sweeping `a` near integers (resonance) blows up
+    // the locked range and small-magnitude shapes look like a flat zero.
+    static float gAprev = -1.f, gLprev = -1.f;
+    if (gAprev != g.a || gLprev != g.L) {
+        s.lGreen.needCapture = true;
+        gAprev = g.a; gLprev = g.L;
     }
     if (s.gPlay && s.tab == TAB_GREEN) {
         g.t += dt * s.gSpeed;
@@ -121,21 +150,28 @@ static void seedDefaults(AppState& s) {
     s.wave.psiExpr    .reparse();
     s.wave.forcingExpr.reparse();
 
-    // Green's default: piecewise Green for -u'' - a^2 u = f, u(0)=u(pi)=0.
-    // Two pieces split at x = xi (see README example).
+    // Green's default: piecewise Green for -u'' - a^2 u = f, u(0)=u(L)=0.
+    // Two pieces split at x = t (see README and var3.md — local convention is
+    // that `t` is the source-position parameter, not time). Using L (not pi)
+    // in the formula so u(L)=0 stays satisfied when the L slider moves away
+    // from pi. Auto-t then sweeps the source across the domain naturally.
     s.green.mode = GreenMode::Custom1D;
     s.green.L    = float(kPi);
+    // a <= pi/(2L) keeps the interior maximum of sin(a*x) outside [0, L], so
+    // the visible peak follows the source through the whole domain instead of
+    // sticking at pi/(2a) once t passes it. For L=pi the critical value is 0.5.
+    s.green.a    = 0.5f;
+    s.green.t    = float(kPi) * 0.5f;
     s.green.xi   = float(kPi) * 0.5f;
-    s.green.a    = 0.7f;            // away from integers; sin(a*pi) != 0
-    s.green.t    = 0.05f;
+    s.gTMax      = float(kPi);      // auto-t cycles 0..L for this formula
     {
         GreenSolver::Piece lo, hi;
         lo.xLoExpr.source = "0";
-        lo.xHiExpr.source = "xi";
-        lo.expr.source    = "sin(a*x)*sin(a*(pi - xi)) / (a*sin(a*pi))";
-        hi.xLoExpr.source = "xi";
+        lo.xHiExpr.source = "t";
+        lo.expr.source    = "sin(a*x)*sin(a*(L - t)) / (a*sin(a*L))";
+        hi.xLoExpr.source = "t";
         hi.xHiExpr.source = "L";
-        hi.expr.source    = "sin(a*xi)*sin(a*(pi - x)) / (a*sin(a*pi))";
+        hi.expr.source    = "sin(a*t)*sin(a*(L - x)) / (a*sin(a*L))";
         for (auto* p : {&lo, &hi}) {
             p->xLoExpr.reparse(); p->xHiExpr.reparse(); p->expr.reparse();
         }

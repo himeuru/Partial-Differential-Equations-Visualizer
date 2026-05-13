@@ -17,7 +17,7 @@ void buildWaveTab(AppState& s) {
     ImGui::Separator(); ImGui::Spacing();
 
     sliderF(u8"Скорость a",    &w.a,      0.1f, 5.f, 0.1f, "%.2f");
-    sliderF(u8"Длина     L",   &w.L,      0.5f, 3.f, 0.1f, "%.2f");
+    sliderF(u8"Длина     L",   &w.L,      0.5f, 7.f, 0.1f, "%.2f");
     sliderI(u8"Членов ряда N", &w.nTerms, 1,    60,  1);
     ImGui::Spacing();
     {
@@ -109,7 +109,7 @@ void buildHeatTab(AppState& s) {
     ImGui::Separator(); ImGui::Spacing();
 
     sliderF(u8"Диффузия  a", &h.a,      0.1f, 3.f, 0.1f, "%.2f");
-    sliderF(u8"Длина     L", &h.L,      0.5f, 3.f, 0.1f, "%.2f");
+    sliderF(u8"Длина     L", &h.L,      0.5f, 7.f, 0.1f, "%.2f");
     sliderI(u8"Членов ряда N", &h.nTerms, 1, 80, 1);
     ImGui::Spacing();
     {
@@ -206,7 +206,7 @@ static void buildGreenHeat(AppState& s) {
     auto& g = s.green;
     prettyFormula("G(x, xi, t) = 1/sqrt(4*pi*a^2*t) * exp(-(x-xi)^2/(4*a^2*t))");
     ImGui::Spacing();
-    sliderF(u8"Длина    L",  &g.L,  0.5f, 2.f, 0.1f, "%.2f");
+    sliderF(u8"Длина    L",  &g.L,  0.5f, 7.f, 0.1f, "%.2f");
     if (g.xi > g.L) g.xi = g.L;
     sliderF(u8"Источник ξ", &g.xi, 0.f, g.L, 0.02f, "%.3f");
     sliderF(u8"Время    t",  &g.t,  0.001f, s.gTMax, 0.005f, "%.4f");
@@ -227,7 +227,7 @@ static void buildGreenWave(AppState& s) {
     prettyFormula("1/(2*a)");
     ImGui::TextColored({0.7f, 0.9f, 1.f, 1.f}, u8"Внутри светового конуса  |x−ξ| ≤ at");
     ImGui::Spacing();
-    sliderF(u8"Длина    L", &g.L, 0.5f, 3.f, 0.1f, "%.2f");
+    sliderF(u8"Длина    L", &g.L, 0.5f, 7.f, 0.1f, "%.2f");
     g.xi = std::clamp(g.xi, 0.f, g.L);
     sliderF(u8"Источник ξ", &g.xi, 0.f, g.L, 0.02f, "%.3f");
     sliderF(u8"Время    t",  &g.t,  0.001f, s.gTMax, 0.02f, "%.3f");
@@ -248,7 +248,7 @@ static void buildGreenSL(AppState& s) {
     ImGui::TextColored({0.7f, 0.9f, 1.f, 1.f}, u8"G(x, ξ) =");
     prettyFormula("sum(n, 1, N, (2/L) * sin(n*pi*x/L) * sin(n*pi*xi/L) / (n*pi/L)^2)");
     ImGui::Spacing();
-    sliderF(u8"Длина    L",  &g.L,      0.5f, 3.f, 0.1f, "%.2f");
+    sliderF(u8"Длина    L",  &g.L,      0.5f, 7.f, 0.1f, "%.2f");
     g.xi = std::clamp(g.xi, 0.f, g.L);
     sliderF(u8"Источник ξ",  &g.xi, 0.f, g.L, 0.02f, "%.3f");
     sliderI(u8"Членов   N",  &g.nTerms, 5, 200, 5);
@@ -383,7 +383,7 @@ void buildFourierTab(AppState& s) {
     if (f.preset == ICPreset::Custom) {
         if (customExprInput(u8"Ваше f(x):", f.customIC)) f.compute();
     }
-    sliderF(u8"Длина  L", &f.L, 0.5f, 3.f, 0.1f, "%.2f");
+    sliderF(u8"Длина  L", &f.L, 0.5f, 7.f, 0.1f, "%.2f");
     ImGui::Spacing();
 
     ImGui::Text(u8"Частичная сумма S_N(x):");
